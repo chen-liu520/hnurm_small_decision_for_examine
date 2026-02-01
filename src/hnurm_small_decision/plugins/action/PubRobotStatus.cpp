@@ -18,6 +18,7 @@ namespace hnurm_small_decision {
 
         executor_thread_ = std::thread([this]()
                                        { callback_group_executor_.spin(); });
+        RCLCPP_INFO(node_->get_logger(), "PubRobotStatus::回调组多线程启动");
         /**************************回调组 end**************************************/
 
 
@@ -29,7 +30,6 @@ namespace hnurm_small_decision {
         cmd_vel_remap_topic_ = node_->declare_parameter("cmd_vel_remap_topic", "/cmd_vel_remap");
         
         node_->declare_parameter("cruise_goals", std::vector<std::string>());
-        //auto cruise_goals_from_param_str_ = node_->get_parameter("cruise_goals").as_string_array();
 
         /**************************参数相关 end**********************************/
         rclcpp::SubscriptionOptions sub_option;
@@ -52,6 +52,8 @@ namespace hnurm_small_decision {
         /**************************订阅者 end**********************************/
 
         cmd_vel_remap_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_remap_topic_, 10);
+
+        RCLCPP_INFO(node_->get_logger(), "PubRobotStatus::构造函数完成");
     }
 
     PubRobotStatus::~PubRobotStatus()
@@ -91,13 +93,15 @@ namespace hnurm_small_decision {
         }
 
         is_global_init_ = true;
+
+        // 调试信息
+        RCLCPP_INFO(node_->get_logger(), "PubRobotStatus::初始化完成，目标点队列大小: %zu",
+                    goal_poses_deque_for_check_.size());
     }
 
     BT::NodeStatus PubRobotStatus::tick()
     {
-        executor_thread_ = std::thread([this](){ 
-            callback_group_executor_.spin(); 
-        });
+        
         if (!is_global_init_)
         {
             initialization();
@@ -120,12 +124,20 @@ namespace hnurm_small_decision {
             goal_poses_deque_for_nav2_.pop_front();
             goal_poses_deque_for_check_.pop_front();
 
+            // 调试信息
+            RCLCPP_INFO(node_->get_logger(), "到达目标点: (%.2f, %.2f), 队列去除该点",
+                        current_goal_x_y.pose_x, current_goal_x_y.pose_y);
+            RCLCPP_INFO(node_->get_logger(), "剩余目标点数量: %zu",
+                        goal_poses_deque_for_check_.size());
+
             if (!goal_poses_deque_for_check_.empty())
             {
                 current_goal_x_y = goal_poses_deque_for_check_.front();
                 current_goal_pose_ = goal_poses_deque_for_nav2_.front();
             }else{
                 setOutput("run_state", false);
+                // 调试信息
+                RCLCPP_INFO(node_->get_logger(), "所有目标点已到达，导航结束");
             }
         }
         is_navigating_ = !goal_poses_deque_for_check_.empty();
@@ -223,7 +235,7 @@ namespace hnurm_small_decision {
         geometry_msgs::msg::Twist vel_pub_;
         vel_pub_ = *msg; 
         // vel_pub_.linear.x *= 0.5;
-        // vel_pub_.angular.z *= 0.5;
+        // vel_pub_.linear.y *= 0.5;
         // cmd_vel_remap_pub_->publish(vel_pub_);
     }
 

@@ -12,7 +12,7 @@ namespace hnurm_small_decision{
     {
         node_ = config().blackboard->get<rclcpp::Node::SharedPtr>("node");
 
-        RCLCPP_INFO(node_->get_logger(), "[GameStart] 等待按回车键开始游戏...");
+        RCLCPP_INFO(node_->get_logger(), "[GameStart] 等待按回车键开始...");
 
         // 启动后台线程监听键盘
         listener_thread_ = std::thread(&GameStart::keyboardListener, this);
@@ -57,7 +57,7 @@ namespace hnurm_small_decision{
                 if (c == '\n')
                 { // 检测到回车键
                     is_game_start_.store(true);
-                    RCLCPP_INFO(node_->get_logger(), "[GameStart] 收到回车键，游戏开始！");
+                    RCLCPP_INFO(node_->get_logger(), "[GameStart] 收到回车键，开始！");
                 }
             }
             // 小延时避免忙等
