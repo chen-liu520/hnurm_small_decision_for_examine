@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="with_clear">
+
+
+
+    <!-- ========================================== -->
+    <!-- 版本0：毛培 -->
+    <!-- ========================================== -->
+    <BehaviorTree ID="decision">
+        <ReactiveSequence>
+            <GameStart/>
+            <PubRobotStatus cruise_goal="{cruise_goal}" goal_poses_deque="{goal_poses_deque}" run_state="{run_state}"/>
+            <Status Status="{cruise_status}"/>
+            <SubTree ID="cruise" __shared_blackboard="true"/>
+            <AlwaysSuccess/>
+
+        </ReactiveSequence>
+    </BehaviorTree>
+
+
+    <!-- ========================================== -->
+    <!-- 版本1：最简单测试 - 固定目标点，无需 PubRobotStatus -->
+    <!-- ========================================== -->
+    <BehaviorTree ID="simple_test">
+        <Sequence>
+            <!-- 等待回车键开始 -->
+            <GameStart/>
+
+            <!-- 依次巡航3个固定点 (x;y;yaw) -->
+            <NavigateToPose goal="1.0;0.0;0.0"/>
+            <NavigateToPose goal="1.0;1.0;1.57"/>
+            <NavigateToPose goal="0.0;0.0;0.0"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ========================================== -->
+    <!-- 版本2：动态目标点 - 简化 PubRobotStatus，只输出 cruise_goal -->
+    <!-- ========================================== -->
+    <BehaviorTree ID="dynamic_goal">
+        <ReactiveSequence>
+            <!-- 持续检查启动状态 -->
+            <GameStart/>
+
+            <!-- 持续发布机器人状态（输出动态目标点） -->
+            <PubRobotStatus cruise_goal="{cruise_goal}" goal_poses_deque="{goal_poses_deque}" run_state="{run_state}" current_controller="{current_controller}"/>
+
+            <!-- 巡航子树 -->
+            <SubTree ID="cruise" __shared_blackboard="true"/>
+        </ReactiveSequence>
+    </BehaviorTree>
+
+
+    <!-- ========================================== -->
+    <!-- 版本3：需要清理功能 - 启动时清理 + 动态目标点 -->
+    <!-- ========================================== -->
+    <BehaviorTree ID="with_clear">
+        <Sequence>
+            <!-- 1. 等待回车键开始 -->
+            <GameStart/>
+
+            <!-- 2. 启动时清理代价地图（只执行一次） -->
+            <ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap service_name="global_costmap/clear_entirely_global_costmap"/>
+
+            <!-- 3. 进入巡航循环（ReactiveSequence 持续更新目标） -->
+            <ReactiveSequence>
+                <PubRobotStatus cruise_goal="{cruise_goal}" goal_poses_deque="{goal_poses_deque}" run_state="{run_state}" current_controller="{current_controller}"/>
+                <SubTree ID="cruise" __shared_blackboard="true"/>
+            </ReactiveSequence>
+        </Sequence>
+    </BehaviorTree>
+
+
+
+    <BehaviorTree ID="cruise">
+        <PipelineSequence name="NavigateToKeepADistance">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{cruise_goal}" output_goal="{updated_target_goal}">
+                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="0.1" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="{current_controller}" path="{truncated_goal_path}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+
+
+
+
+
+    <!-- ========================================== -->
+    <!-- TreeNodesModel：Groot 编辑器节点定义 -->
+    <!-- ========================================== -->
+    <TreeNodesModel>
+        <!-- ========== Nav2 内置节点 ========== -->
+        <Action ID="ClearEntireCostmap">
+            <input_port name="service_name" default="local_costmap/clear_entirely_local_costmap">Service name</input_port>
+            <input_port name="server_timeout" default="1000">Server timeout (ms)</input_port>
+        </Action>
+
+        <Action ID="ComputePathToPose">
+            <input_port name="goal">Destination to plan to</input_port>
+            <input_port name="planner_id" default="GridBased">Planner plugin name</input_port>
+            <output_port name="path">Path created by ComputePathToPose</output_port>
+        </Action>
+
+        <Action ID="FollowPath">
+            <input_port name="controller_id" default="FollowPath">Controller plugin name</input_port>
+            <input_port name="path">Path to follow</input_port>
+            <input_port name="goal_checker_id" default="general_goal_checker">Goal checker plugin name</input_port>
+        </Action>
+
+        <Action ID="NavigateToPose">
+            <input_port name="goal">Goal pose as "x;y;yaw"</input_port>
+            <input_port name="behavior_tree" default="">Behavior tree to use for navigation</input_port>
+        </Action>
+
+        <Decorator ID="GoalUpdater">
+            <input_port name="input_goal">Original goal in</input_port>
+            <output_port name="output_goal">Output goal set by subscription</output_port>
+        </Decorator>
+
+        <Action ID="TruncatePath">
+            <input_port name="distance">Distance before goal to truncate</input_port>
+            <input_port name="input_path">Path to truncate</input_port>
+            <output_port name="output_path">Truncated path to utilize</output_port>
+        </Action>
+
+        <Control ID="PipelineSequence"/>
+
+        <Decorator ID="RateController">
+            <input_port name="hz" default="10.0">Rate in Hz</input_port>
+        </Decorator>
+
+        <Decorator ID="KeepRunningUntilFailure"/>
+
+        <!-- ========== 自定义节点 ========== -->
+        <!-- GameStart：等待键盘输入开始 -->
+        <Condition ID="GameStart">
+            <description>Wait for Enter key to start the game</description>
+        </Condition>
+
+        <!-- PubRobotStatus：发布机器人状态（简化版） -->
+        <Action ID="PubRobotStatus">
+            <description>Publish robot status and output dynamic goals</description>
+            <output_port name="cruise_goal" default="{cruise_goal}">Dynamic cruise goal pose</output_port>
+            <output_port name="run_state" default="{run_state}">Current running state</output_port>
+            <!-- 保留其他端口兼容性 -->
+            <!--output_port name="hp_status" default="{hp_status}">HP status (not used in test)</output_port>
+            <output_port name="cruise_status" default="{cruise_status}">Cruise status flag</output_port>
+            <output_port name="pursuit_status" default="{pursuit_status}">Pursuit status flag</output_port>
+            <output_port name="target_goal" default="{target_goal}">Target goal for pursuit</output_port>
+            <output_port name="is_hp_ok" default="{is_hp_ok}">HP check result</output_port>
+            <output_port name="pursuit_mode1" default="{pursuit_mode1}">Pursuit mode 1 flag</output_port>
+            <output_port name="pursuit_mode2" default="{pursuit_mode2}">Pursuit mode 2 flag</output_port>
+            <output_port name="supply_goal" default="{supply_goal}">Supply station goal</output_port>
+            <output_port name="goal_pose_override" default="{goal_pose_override}">Goal override</output_port>
+            <output_port name="navigate_to_pose_status" default="{navigate_to_pose_status}">Navigation status</output_port>
+            
+            <output_port name="is_in_special_area" default="{is_in_special_area}">Special area check</output_port>
+            <output_port name="goal_poses" default="{goal_poses}">Goal poses deque</output_port >
+            <output_port name="do_clear" default="{do_clear}">Costmap clear flag</output_port -->
+            <output_port name="current_controller" default="{current_controller}">Current controller ID</output_port>
+            <output_port name="goal_poses_deque" default="{goal_poses_deque}">Goal poses deque</output_port>
+        </Action>
+
+        <!-- Status：原系统的状态检查节点 -->
+        <Condition ID="Status">
+            <description>Check robot status conditions</description>
+            <input_port name="Status" default="{Status}">Status to check</input_port>
+        </Condition>
+
+        <!-- 常用控制流节点 -->
+        <Control ID="Sequence">
+            <description>Execute children in sequence until one fails</description>
+        </Control>
+
+        <Control ID="ReactiveSequence">
+            <description>Execute children in sequence, re-tick previous children</description>
+        </Control>
+
+        <Action ID="AlwaysSuccess">
+            <description>Always returns SUCCESS</description>
+        </Action>
+
+    </TreeNodesModel>
+
+
+</root>
