@@ -10,7 +10,6 @@
         <ReactiveSequence>
             <GameStart/>
             <PubRobotStatus cruise_goal="{cruise_goal}" goal_poses_deque="{goal_poses_deque}" run_state="{run_state}"/>
-            <Status Status="{cruise_status}"/>
             <SubTree ID="cruise" __shared_blackboard="true"/>
             <AlwaysSuccess/>
 
