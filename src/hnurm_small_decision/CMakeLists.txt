@@ -60,4 +60,9 @@ install(TARGETS decision_node
 install(DIRECTORY param/
     DESTINATION share/${PROJECT_NAME}/param
 )
+
+install(DIRECTORY launch/
+    DESTINATION share/${PROJECT_NAME}/launch
+)
+
 ament_package()
